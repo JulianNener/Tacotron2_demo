@@ -43,35 +43,20 @@ from dllogger import StdOutBackend, JSONStreamBackend, Verbosity
 
 from waveglow.denoiser import Denoiser
 
-def parse_args(parser):
-    """
-    Parse commandline arguments.
-    """
-    parser.add_argument('--text', type=str, required=True)
-    parser.add_argument('-o', '--output',
-                        help='output folder to save audio (file per phrase)', default='./output')
-    parser.add_argument('--suffix', type=str, default="", help="output filename suffix")
-    parser.add_argument('--tacotron2', type=str,
-                        help='full path to the Tacotron2 model checkpoint file', default='./checkpoints/tacotron2_1032590_6000_amp')
-    parser.add_argument('--waveglow', type=str,
-                        help='full path to the WaveGlow model checkpoint file', default='./checkpoints/waveglow_1076430_14000_amp')
+def parse_args(parser, tacotron2_path, waveglow_path):
+    parser.add_argument('--tacotron2', type=str, default=tacotron2_path)
+    parser.add_argument('--waveglow', type=str, default=waveglow_path)
     parser.add_argument('-s', '--sigma-infer', default=0.9, type=float)
     parser.add_argument('-d', '--denoising-strength', default=0.01, type=float)
-    parser.add_argument('-sr', '--sampling-rate', default=22050, type=int,
-                        help='Sampling rate')
+    parser.add_argument('-sr', '--sampling-rate', default=22050, type=int)
 
     run_mode = parser.add_mutually_exclusive_group()
-    run_mode.add_argument('--fp16', action='store_true',
-                        help='Run inference with mixed precision')
-    run_mode.add_argument('--cpu', action='store_true',
-                        help='Run inference on CPU')
+    run_mode.add_argument('--fp16', action='store_true', default=False)
+    run_mode.add_argument('--cpu', action='store_true', default=False)
 
-    parser.add_argument('--log-file', type=str, default='nvlog.json',
-                        help='Filename for logging')
-    parser.add_argument('--include-warmup', action='store_true',
-                        help='Include warmup')
-    parser.add_argument('--stft-hop-length', type=int, default=256,
-                        help='STFT hop length for estimating audio length from mel size')
+    parser.add_argument('--log-file', type=str, default='nvlog.json')
+    parser.add_argument('--include-warmup', action='store_true', default=False)
+    parser.add_argument('--stft-hop-length', type=int, default=256)
 
     return parser
 

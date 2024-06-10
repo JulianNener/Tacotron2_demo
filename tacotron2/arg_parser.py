@@ -27,7 +27,7 @@
 
 import argparse
 
-from tacotron2.text import symbols
+
 
 
 def tacotron2_parser(parent, add_help=False):
@@ -43,7 +43,7 @@ def tacotron2_parser(parent, add_help=False):
                         help='Number of bins in mel-spectrograms')
 
     # symbols parameters
-    global symbols
+    from tacotron2.text import symbols
     len_symbols = len(symbols)
     symbols = parser.add_argument_group('symbols parameters')
     symbols.add_argument('--n-symbols', default=len_symbols, type=int,

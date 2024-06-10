@@ -26,7 +26,7 @@
 # *****************************************************************************
 
 import sys
-sys.path.append('tacotron2')
+sys.path.append('Tacotron2_demo')
 import torch
 from tacotron2_common.layers import STFT
 

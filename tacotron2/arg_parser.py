@@ -26,7 +26,7 @@
 # *****************************************************************************
 
 import argparse
-from tacotron2.text import symbols as syms
+from tacotron2.text import symbols
 
 
 def tacotron2_parser(parent, add_help=False):
@@ -43,11 +43,11 @@ def tacotron2_parser(parent, add_help=False):
 
     # symbols parameters
     
-    len_symbols = len(syms)
-    symbols = parser.add_argument_group('symbols parameters')
-    symbols.add_argument('--n-symbols', default=len_symbols, type=int,
+    len_symbols = len(symbols)
+    symbol_params = parser.add_argument_group('symbols parameters')
+    symbol_params.add_argument('--n-symbols', default=len_symbols, type=int,
                          help='Number of symbols in dictionary')
-    symbols.add_argument('--symbols-embedding-dim', default=512, type=int,
+    symbol_params.add_argument('--symbols-embedding-dim', default=512, type=int,
                          help='Input embedding dimension')
 
     # encoder parameters

@@ -26,8 +26,7 @@
 # *****************************************************************************
 
 import argparse
-
-
+from tacotron2.text import symbols as syms
 
 
 def tacotron2_parser(parent, add_help=False):
@@ -43,8 +42,8 @@ def tacotron2_parser(parent, add_help=False):
                         help='Number of bins in mel-spectrograms')
 
     # symbols parameters
-    from tacotron2.text import symbols
-    len_symbols = len(symbols)
+    
+    len_symbols = len(syms)
     symbols = parser.add_argument_group('symbols parameters')
     symbols.add_argument('--n-symbols', default=len_symbols, type=int,
                          help='Number of symbols in dictionary')

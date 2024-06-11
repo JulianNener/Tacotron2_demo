@@ -764,7 +764,7 @@ class Tacotron2(nn.Module):
         embedded_inputs = self.embedding(inputs).transpose(1, 2)
         encoder_outputs = self.encoder.infer(embedded_inputs, input_lengths)
 
-        if alignments:
+        if alignments is not None:
             mel_outputs, gate_outputs, alignments, mel_lengths = self.decoder.infer_with_forced_alignments(encoder_outputs, input_lengths, alignments_input=alignments)
         else:
             mel_outputs, gate_outputs, alignments, mel_lengths = self.decoder.infer(encoder_outputs, input_lengths)

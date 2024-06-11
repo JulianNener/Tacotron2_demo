@@ -4,4 +4,5 @@ inflect
 librosa
 scipy
 resampy==0.3.1
+gdown
 git+https://github.com/NVIDIA/dllogger@v0.1.0#egg=dllogger

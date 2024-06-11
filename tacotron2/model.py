@@ -593,6 +593,91 @@ class Decoder(nn.Module):
             mel_outputs, gate_outputs, alignments)
 
         return mel_outputs, gate_outputs, alignments, mel_lengths
+    
+
+    def infer_with_forced_alignments(self, memory, memory_lengths, alignments_input):
+        """ Decoder inference
+        PARAMS
+        ------
+        memory: Encoder outputs
+
+        RETURNS
+        -------
+        mel_outputs: mel outputs from the decoder
+        gate_outputs: gate outputs from the decoder
+        alignments: sequence of attention weights from the decoder
+        """
+        decoder_input = self.get_go_frame(memory)
+
+        mask = get_mask_from_lengths(memory_lengths)
+        (attention_hidden,
+         attention_cell,
+         decoder_hidden,
+         decoder_cell,
+         attention_weights,
+         attention_weights_cum,
+         attention_context,
+         processed_memory) = self.initialize_decoder_states(memory)
+
+        mel_lengths = torch.zeros([memory.size(0)], dtype=torch.int32, device=memory.device)
+        not_finished = torch.ones([memory.size(0)], dtype=torch.int32, device=memory.device)
+
+        mel_outputs, gate_outputs = (torch.zeros(1), torch.zeros(1))
+        first_iter = True
+        alignments_input = alignments_input.unsqueeze(0).permute(2, 0, 1)
+        t = 0
+        while True:
+            decoder_input = self.prenet(decoder_input)
+            (mel_output,
+             gate_output,
+             attention_hidden,
+             attention_cell,
+             decoder_hidden,
+             decoder_cell,
+             attention_weights,
+             attention_weights_cum,
+             attention_context) = self.decode(decoder_input,
+                                              attention_hidden,
+                                              attention_cell,
+                                              decoder_hidden,
+                                              decoder_cell,
+                                              alignments_input[t],
+                                              attention_weights_cum,
+                                              attention_context,
+                                              memory,
+                                              processed_memory,
+                                              mask)
+
+            if first_iter:
+                mel_outputs = mel_output.unsqueeze(0)
+                gate_outputs = gate_output
+                alignments = attention_weights
+                first_iter = False
+            else:
+                mel_outputs = torch.cat(
+                    (mel_outputs, mel_output.unsqueeze(0)), dim=0)
+                gate_outputs = torch.cat((gate_outputs, gate_output), dim=0)
+                alignments = torch.cat((alignments, attention_weights), dim=0)
+
+            dec = torch.le(torch.sigmoid(gate_output),
+                           self.gate_threshold).to(torch.int32).squeeze(1)
+
+            not_finished = not_finished*dec
+            mel_lengths += not_finished
+
+            if self.early_stopping and torch.sum(not_finished) == 0:
+                break
+            if len(mel_outputs) == self.max_decoder_steps:
+                print("Warning! Reached max decoder steps")
+                break
+
+            decoder_input = mel_output
+            t += 1
+
+        mel_outputs, gate_outputs, alignments = self.parse_decoder_outputs(
+            mel_outputs, gate_outputs, alignments)
+
+        return mel_outputs, gate_outputs, alignments, mel_lengths
 
 
 class Tacotron2(nn.Module):
@@ -675,12 +760,14 @@ class Tacotron2(nn.Module):
             output_lengths)
 
 
-    def infer(self, inputs, input_lengths):
-
+    def infer(self, inputs, input_lengths, alignments=None):
         embedded_inputs = self.embedding(inputs).transpose(1, 2)
         encoder_outputs = self.encoder.infer(embedded_inputs, input_lengths)
-        mel_outputs, gate_outputs, alignments, mel_lengths = self.decoder.infer(
-            encoder_outputs, input_lengths)
+
+        if alignments:
+            mel_outputs, gate_outputs, alignments, mel_lengths = self.decoder.infer_with_forced_alignments(encoder_outputs, input_lengths, alignments_input=alignments)
+        else:
+            mel_outputs, gate_outputs, alignments, mel_lengths = self.decoder.infer(encoder_outputs, input_lengths)
 
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet

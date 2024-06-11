@@ -94,7 +94,7 @@ class Attention(nn.Module):
         return energies
 
     def forward(self, attention_hidden_state, memory, processed_memory,
-                attention_weights_cat, mask):
+                attention_weights_cat, mask, align_input=None):
         """
         PARAMS
         ------
@@ -109,7 +109,11 @@ class Attention(nn.Module):
 
         alignment = alignment.masked_fill(mask, self.score_mask_value)
 
-        attention_weights = F.softmax(alignment, dim=1)
+        attention_weights = F.softmax(alignment, dim=1)      
+
+        if align_input is not None:
+            attention_weights = align_input
+            
         attention_context = torch.bmm(attention_weights.unsqueeze(1), memory)
         attention_context = attention_context.squeeze(1)
 
@@ -400,7 +404,7 @@ class Decoder(nn.Module):
     def decode(self, decoder_input, attention_hidden, attention_cell,
                decoder_hidden, decoder_cell, attention_weights,
                attention_weights_cum, attention_context, memory,
-               processed_memory, mask):
+               processed_memory, mask, use_forced_alignment=False):
         """ Decoder step using stored states, attention and memory
         PARAMS
         ------
@@ -414,31 +418,24 @@ class Decoder(nn.Module):
         """
         cell_input = torch.cat((decoder_input, attention_context), -1)
 
-        attention_hidden, attention_cell = self.attention_rnn(
-            cell_input, (attention_hidden, attention_cell))
-        attention_hidden = F.dropout(
-            attention_hidden, self.p_attention_dropout, self.training)
+        attention_hidden, attention_cell = self.attention_rnn(cell_input, (attention_hidden, attention_cell))
+        attention_hidden = F.dropout(attention_hidden, self.p_attention_dropout, self.training)
 
-        attention_weights_cat = torch.cat(
-            (attention_weights.unsqueeze(1),
-             attention_weights_cum.unsqueeze(1)), dim=1)
-        attention_context, attention_weights = self.attention_layer(
-            attention_hidden, memory, processed_memory,
-            attention_weights_cat, mask)
+        attention_weights_cat = torch.cat((attention_weights.unsqueeze(1), attention_weights_cum.unsqueeze(1)), dim=1)
+
+        if use_forced_alignment:
+            attention_context, attention_weights = self.attention_layer(attention_hidden, memory, processed_memory, attention_weights_cat, mask, attention_weights)
+        else:
+            attention_context, attention_weights = self.attention_layer(attention_hidden, memory, processed_memory, attention_weights_cat, mask)
 
         attention_weights_cum += attention_weights
-        decoder_input = torch.cat(
-            (attention_hidden, attention_context), -1)
+        decoder_input = torch.cat((attention_hidden, attention_context), -1)
 
-        decoder_hidden, decoder_cell = self.decoder_rnn(
-            decoder_input, (decoder_hidden, decoder_cell))
-        decoder_hidden = F.dropout(
-            decoder_hidden, self.p_decoder_dropout, self.training)
+        decoder_hidden, decoder_cell = self.decoder_rnn(decoder_input, (decoder_hidden, decoder_cell))
+        decoder_hidden = F.dropout(decoder_hidden, self.p_decoder_dropout, self.training)
 
-        decoder_hidden_attention_context = torch.cat(
-            (decoder_hidden, attention_context), dim=1)
-        decoder_output = self.linear_projection(
-            decoder_hidden_attention_context)
+        decoder_hidden_attention_context = torch.cat((decoder_hidden, attention_context), dim=1)
+        decoder_output = self.linear_projection(decoder_hidden_attention_context)
 
         gate_prediction = self.gate_layer(decoder_hidden_attention_context)
 
@@ -624,9 +621,10 @@ class Decoder(nn.Module):
 
         mel_outputs, gate_outputs = (torch.zeros(1), torch.zeros(1))
         first_iter = True
+        output_len = alignments_input.size(-1)
         alignments_input = alignments_input.unsqueeze(0).permute(2, 0, 1)
-        t = 0
-        while True:
+        alignments_input = torch.cat((attention_weights.unsqueeze(0), alignments_input), dim=0)
+        for t in range(output_len):
             decoder_input = self.prenet(decoder_input)
             (mel_output,
              gate_output,
@@ -646,7 +644,7 @@ class Decoder(nn.Module):
                                               attention_context,
                                               memory,
                                               processed_memory,
-                                              mask)
+                                              mask, use_forced_alignment=True)
 
             if first_iter:
                 mel_outputs = mel_output.unsqueeze(0)
@@ -659,23 +657,11 @@ class Decoder(nn.Module):
                 gate_outputs = torch.cat((gate_outputs, gate_output), dim=0)
                 alignments = torch.cat((alignments, attention_weights), dim=0)
 
-            dec = torch.le(torch.sigmoid(gate_output),
-                           self.gate_threshold).to(torch.int32).squeeze(1)
 
-            not_finished = not_finished*dec
             mel_lengths += not_finished
-
-            if self.early_stopping and torch.sum(not_finished) == 0:
-                break
-            if len(mel_outputs) == self.max_decoder_steps:
-                print("Warning! Reached max decoder steps")
-                break
-
             decoder_input = mel_output
-            t += 1
 
-        mel_outputs, gate_outputs, alignments = self.parse_decoder_outputs(
-            mel_outputs, gate_outputs, alignments)
+        mel_outputs, gate_outputs, alignments = self.parse_decoder_outputs(mel_outputs, gate_outputs, alignments)
 
         return mel_outputs, gate_outputs, alignments, mel_lengths
 

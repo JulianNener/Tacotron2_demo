@@ -509,7 +509,7 @@ class Decoder(nn.Module):
         return mel_outputs, gate_outputs, alignments
 
     @torch.jit.export
-    def infer(self, memory, memory_lengths):
+    def infer(self, memory, memory_lengths, max_decoder_steps=2000):
         """ Decoder inference
         PARAMS
         ------
@@ -580,7 +580,7 @@ class Decoder(nn.Module):
 
             if self.early_stopping and torch.sum(not_finished) == 0:
                 break
-            if len(mel_outputs) == self.max_decoder_steps:
+            if len(mel_outputs) == max_decoder_steps:
                 print("Warning! Reached max decoder steps")
                 break
 
@@ -746,14 +746,14 @@ class Tacotron2(nn.Module):
             output_lengths)
 
 
-    def infer(self, inputs, input_lengths, alignments=None):
+    def infer(self, inputs, input_lengths, alignments=None, max_decoder_steps=2000):
         embedded_inputs = self.embedding(inputs).transpose(1, 2)
         encoder_outputs = self.encoder.infer(embedded_inputs, input_lengths)
 
         if alignments is not None:
             mel_outputs, gate_outputs, alignments, mel_lengths = self.decoder.infer_with_forced_alignments(encoder_outputs, input_lengths, alignments_input=alignments)
         else:
-            mel_outputs, gate_outputs, alignments, mel_lengths = self.decoder.infer(encoder_outputs, input_lengths)
+            mel_outputs, gate_outputs, alignments, mel_lengths = self.decoder.infer(encoder_outputs, input_lengths, max_decoder_steps=max_decoder_steps)
 
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
